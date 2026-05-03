@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "atlassian": {
+      "command": "uvx",
+      "args": ["mcp-atlassian"],
+      "env": {
+        "JIRA_URL": "https://keshah716.atlassian.net",
+        "JIRA_USERNAME": "keshah716@gmail.com",
+        "JIRA_API_TOKEN": "ATATT3xFfGF0XCxiX2owoYclxnWrPuPyN0y_AqVzh-pNqG1ooKvW6n64fxKY4-ASwBfq_49A_cUMRV1G4D8urdKHQz8AC_l89ryUUKUUt8AxS6vkrao3x5LErRb1tR46MJiVjU4qsHCdgxevfPKOkNaZCPOziuHsDAGLa2f7iZEdrl3unh6PZA0=1969F690"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\demoAI"
+      ]
+    }
+  }
+}

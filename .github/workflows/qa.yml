@@ -1,0 +1,99 @@
+name: QA Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  playwright-tests:
+    name: Playwright Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests (sharded)
+        run: npx playwright test --shard=${{ matrix.shard }}/4
+        strategy:
+          fail-fast: false
+          matrix:
+            shard: [1, 2, 3, 4]
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 7
+
+  ai-review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            Сделай ревью этого PR с фокусом на качество автотестов.
+            Используй чеклист из .claude/agents/code-reviewer.md.
+            Особое внимание:
+            1. Соответствует ли код стандартам из CLAUDE.md
+            2. Все ли P0/P1 кейсы из test-cases/ автоматизированы
+            3. Нет ли регресса в существующих тестах
+            4. Селекторы — через POM, без захардкоженных значений
+            Оставь комментарии inline на конкретных строках, plus финальный summary.
+
+  ai-triage:
+    name: AI Triage on Failure
+    needs: playwright-tests
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-report-*
+          merge-multiple: true
+          path: playwright-report/
+
+      - name: Claude Triage
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            Регрессия упала. Проанализируй playwright-report/ и для каждого
+            упавшего теста определи: FLAKY / BUG / STALE / INFRA.
+            Запости итоговую таблицу комментарием в PR.
+            Для FLAKY-тестов — предложи конкретный fix.
+            Для BUG — кратко опиши, как воспроизвести вне теста.
