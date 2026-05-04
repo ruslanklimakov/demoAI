@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '0 6 * * 1-5'  # Mon–Fri 09:00 MSK — ежедневная регрессия
+    - cron: '*/5 * * * *'  # every 5 min — demo mode (change back to '0 6 * * 1-5' after demo)
   workflow_dispatch:
 
 jobs:
