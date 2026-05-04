@@ -6,3 +6,12 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# MCP runtime artifacts (logs, page state snapshots)
+.playwright-mcp/
+
+# Local Claude settings (personal, not team config)
+.claude/settings.local.json
+
+# Logs
+*.log

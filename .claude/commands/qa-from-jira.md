@@ -35,12 +35,20 @@ argument-hint: TICKET-ID (например SCRUM-6)
 - Top-3 рисков подсвети явно
 - Покажи мне файл
 
-**Фаза 4 — Test cases**
+**Фаза 4 — Test cases + Jira tickets**
 - Создай `test-cases/$ARGUMENTS.md` в Gherkin
 - Структура: Feature → несколько Scenario / Scenario Outline
 - Покрытие: happy path (P0), negative (P1), boundary (P1), security (P0/P1), accessibility (P2)
 - В заголовке каждого сценария — приоритет: `[P0]`, `[P1]`, `[P2]`
 - Покажи мне файл
+- Создай в Jira **отдельный тикет на каждый сценарий** через atlassian MCP (`jira_create_issue`):
+  - `summary` = точное название сценария из файла (включая `[P0]`/`[P1]`/`[P2]` префикс)
+  - `issue_type` = Task
+  - `priority`: High для P0, Medium для P1, Low для P2
+  - `labels`: приоритет + номер родительского тикета + `radio-button` (или имя фичи) + `automated` для P0/P1
+  - `description`: полный Gherkin-текст сценария + строка `**Parent ticket:** $ARGUMENTS` + `**Automated:** Yes/No`
+  - Создавай все тикеты параллельно (один вызов = один `jira_create_issue`, все вызовы в одном сообщении)
+- После создания покажи таблицу: тикет → приоритет → автоматизирован → summary
 
 **Фаза 5 — Automation**
 - Автоматизируй все P0 и P1 сценарии
