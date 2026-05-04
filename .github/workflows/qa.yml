@@ -102,7 +102,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          direct_prompt: |
+          prompt: |
             Сделай ревью этого PR с фокусом на качество автотестов.
             Особое внимание:
             1. Соответствует ли код стандартам из CLAUDE.md
@@ -150,7 +150,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          direct_prompt: |
+          prompt: |
             Регрессия упала на PR. Проанализируй playwright-report/ и для каждого
             упавшего теста определи категорию: FLAKY / BUG / STALE / INFRA.
             Запости итоговую таблицу комментарием в PR:
@@ -164,7 +164,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          direct_prompt: |
+          prompt: |
             Ночная регрессия упала (run: ${{ github.run_id }}).
             Проанализируй playwright-report/ и для каждого упавшего теста
             определи: FLAKY / BUG / STALE / INFRA.
