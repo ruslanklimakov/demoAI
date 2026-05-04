@@ -5,13 +5,22 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    - cron: '0 6 * * 1-5'  # Mon–Fri 09:00 MSK — ежедневная регрессия
   workflow_dispatch:
 
 jobs:
+  # ─────────────────────────────────────────────
+  # 1. Шардированный прогон тестов
+  # ─────────────────────────────────────────────
   playwright-tests:
-    name: Playwright Regression
+    name: Regression shard ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
 
@@ -25,23 +34,57 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests (sharded)
+      - name: Run tests (shard ${{ matrix.shard }}/4)
         run: npx playwright test --shard=${{ matrix.shard }}/4
-        strategy:
-          fail-fast: false
-          matrix:
-            shard: [1, 2, 3, 4]
         env:
           BASE_URL: ${{ secrets.BASE_URL }}
 
-      - name: Upload report
+      - name: Upload blob report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.shard }}
-          path: playwright-report/
-          retention-days: 7
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 3
 
+  # ─────────────────────────────────────────────
+  # 2. Мердж шардов → единый HTML-отчёт
+  # ─────────────────────────────────────────────
+  merge-reports:
+    name: Merge Reports
+    needs: playwright-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: blob-report-*
+          merge-multiple: true
+          path: all-blob-reports/
+
+      - name: Merge into single HTML report
+        run: npx playwright merge-reports --reporter html all-blob-reports/
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+  # ─────────────────────────────────────────────
+  # 3. AI-ревью кода (только на PR)
+  # ─────────────────────────────────────────────
   ai-review:
     name: AI Code Review
     runs-on: ubuntu-latest
@@ -61,39 +104,73 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           direct_prompt: |
             Сделай ревью этого PR с фокусом на качество автотестов.
-            Используй чеклист из .claude/agents/code-reviewer.md.
             Особое внимание:
             1. Соответствует ли код стандартам из CLAUDE.md
             2. Все ли P0/P1 кейсы из test-cases/ автоматизированы
             3. Нет ли регресса в существующих тестах
             4. Селекторы — через POM, без захардкоженных значений
-            Оставь комментарии inline на конкретных строках, plus финальный summary.
+            Оставь комментарии inline на конкретных строках, плюс финальный summary.
 
+  # ─────────────────────────────────────────────
+  # 4. AI-триаж при падении
+  #    • PR → комментарий в PR
+  #    • Scheduled → GitHub Issue с label "regression"
+  # ─────────────────────────────────────────────
   ai-triage:
-    name: AI Triage on Failure
+    name: AI Triage
     needs: playwright-tests
-    if: failure() && github.event_name == 'pull_request'
+    if: failure() && (github.event_name == 'pull_request' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download reports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download blob reports
         uses: actions/download-artifact@v4
         with:
-          pattern: playwright-report-*
+          pattern: blob-report-*
           merge-multiple: true
-          path: playwright-report/
+          path: all-blob-reports/
 
-      - name: Claude Triage
+      - name: Merge reports for analysis
+        run: npx playwright merge-reports --reporter html all-blob-reports/
+
+      - name: Claude Triage — PR comment
+        if: github.event_name == 'pull_request'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           direct_prompt: |
-            Регрессия упала. Проанализируй playwright-report/ и для каждого
-            упавшего теста определи: FLAKY / BUG / STALE / INFRA.
-            Запости итоговую таблицу комментарием в PR.
-            Для FLAKY-тестов — предложи конкретный fix.
-            Для BUG — кратко опиши, как воспроизвести вне теста.
+            Регрессия упала на PR. Проанализируй playwright-report/ и для каждого
+            упавшего теста определи категорию: FLAKY / BUG / STALE / INFRA.
+            Запости итоговую таблицу комментарием в PR:
+            | Тест | Категория | Причина | Fix |
+            Для FLAKY — предложи конкретный fix (selector, wait, retry).
+            Для BUG — кратко опиши шаги воспроизведения вне теста.
+
+      - name: Claude Triage — GitHub Issue (scheduled)
+        if: github.event_name == 'schedule'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          direct_prompt: |
+            Ночная регрессия упала (run: ${{ github.run_id }}).
+            Проанализируй playwright-report/ и для каждого упавшего теста
+            определи: FLAKY / BUG / STALE / INFRA.
+            Создай GitHub Issue:
+            - Заголовок: "🔴 Daily regression failed — ${{ github.run_number }}"
+            - Label: "regression"
+            - Тело: таблица упавших тестов с категорией и кратким описанием
+            - Для BUG — добавь второй label "bug"
+            - Прикрепи ссылку на артефакт playwright-report из этого run
