@@ -14,7 +14,7 @@ test.describe('Check Box', () => {
     await checkBoxPage.selectHome();
  
     await expect(checkBoxPage.homeCheckbox).toBeChecked();
-    await expect(checkBoxPage.result).toContainText('home');
+    await expect(checkBoxPage.result).toContainText('error'); // home
     await expect(checkBoxPage.result).toContainText('desktop');
     await expect(checkBoxPage.result).toContainText('documents');
     await expect(checkBoxPage.result).toContainText('downloads');
