@@ -119,7 +119,7 @@ jobs:
   ai-triage:
     name: AI Triage
     needs: playwright-tests
-    if: failure() && (github.event_name == 'pull_request' || github.event_name == 'schedule')
+    if: failure() && (github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -159,7 +159,7 @@ jobs:
             Для BUG — кратко опиши шаги воспроизведения вне теста.
 
       - name: Claude Triage — GitHub Issue (scheduled)
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
